@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// --- MÓDULO TABLEROS Y TARJETAS ---
+model Tablero {
+  id       Int       @id @default(autoincrement())
+  titulo   String
+  tarjetas Tarjeta[]
+}
+
+model Tarjeta {
+  id        Int     @id @default(autoincrement())
+  titulo    String
+  tableroId Int
+  tablero   Tablero @relation(fields: [tableroId], references: [id], onDelete: Cascade)
+  tareas    Tarea[]
+}
+
+model Tarea {
+  id            Int     @id @default(autoincrement())
+  texto         String
+  etiqueta      String?
+  colorEtiqueta String?
+  tarjetaId     Int
+  tarjeta       Tarjeta @relation(fields: [tarjetaId], references: [id], onDelete: Cascade)
+}
+
+// --- MÓDULO DE PRÉSTAMOS Y EQUIPOS ---
+
+model Equipo {
+  id        Int    @id @default(autoincrement())
+  nombre    String
+  categoria String
+  estado    String @default("Disponible")
+}
+
+model Prestamo {
+  id              Int     @id @default(autoincrement())
+  equipoId        Int
+  solicitante     String
+  fechaPrestamo   String
+  fechaDevolucion String?
+}

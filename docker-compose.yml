@@ -1,0 +1,20 @@
+
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mantiene tu base de datos SQLite guardada persistentemente en tu PC
+      - ./backend/prisma:/app/prisma
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=file:./dev.db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

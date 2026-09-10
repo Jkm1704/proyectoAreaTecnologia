@@ -1,0 +1,42 @@
+{
+  "equipos": [
+    {
+      "nombre": "portatil",
+      "serial": "S/N",
+      "id": 1785527535674,
+      "estado": "Disponible"
+    },
+    {
+      "nombre": "PORTATIL DELL LATITUDE 3410",
+      "serial": "52805101000326",
+      "id": 1785787324541,
+      "estado": "Disponible"
+    },
+    {
+      "nombre": "PORTATIL HP  CCP07",
+      "serial": "44-290722",
+      "id": 1785788203799,
+      "estado": "En Préstamo"
+    },
+    {
+      "nombre": "PORTATIL HP ",
+      "serial": "1004089100",
+      "id": 1785859824976,
+      "estado": "Disponible"
+    }
+  ],
+  "prestamos": [
+    {
+      "solicitante": "GERMAN LEONARDO",
+      "area": "ARCHIVO",
+      "equipoId": "1785788203799",
+      "fechaPrestamo": "2026-08-03",
+      "fechaDevolucionProbable": "",
+      "observaciones": "",
+      "equipoNombre": "PORTATIL HP  CCP07",
+      "equipoSerial": "44-290722",
+      "id": 1785794945781,
+      "estado": "Prestado"
+    }
+  ]
+}
