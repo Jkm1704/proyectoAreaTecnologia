@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
 const { PrismaClient } = require("@prisma/client");
+const multer = require("multer");
+const ExcelJS = require("exceljs");
+const upload = multer({ storage: multer.memoryStorage() });
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL || "file:./dev.db",
@@ -209,6 +212,213 @@ app.post("/api/prestamos-data", async (req, res) => {
   }
 });
 
+// Columnas objetivo
+const COLUMNAS_DESEADAS = [
+  "MATRICULA",
+  "ORGANIZACION",
+  "EST-MATRICULA",
+  "RAZON SOCIAL",
+  "NOMBRE 1",
+  "NOMBRE 2",
+  "APELLIDO 1",
+  "APELLIDO 2",
+  "IDENTIFICACION",
+  "NIT",
+  "FEC-MATRICULA",
+  "FEC-RENOVACION",
+  "ULT-ANO_REN",
+  "DIR-COMERCIAL",
+  "BARRIO-COMERCIAL",
+  "MUN-COMERCIAL",
+  "TEL-COM-1",
+  "TEL-COM-2",
+  "TEL-COM-3",
+  "EMAIL-COMERCIAL",
+  "EMAIL-COM-2",
+  "EMAIL-COM-3",
+  "DIR-NOTIFICACION",
+  "MUN-NOTIFICACION",
+  "EMAIL-NOTIFICACION",
+  "TAM-EMPRESA",
+  "PERSONAL",
+];
+// --- FUNCIÓN DE FORMATEO DE FECHAS (DD/MM/YYYY) ---
+function formatearFecha(val) {
+  if (!val) return "";
+  const str = String(val).trim();
+
+  // Caso YYYYMMDD (ej: 20261013)
+  if (str.length === 8 && /^\d+$/.test(str)) {
+    return `${str.substring(6, 8)}/${str.substring(4, 6)}/${str.substring(0, 4)}`;
+  }
+
+  // Caso YYYY-MM-DD (ej: 2026-10-13)
+  if (str.length === 10 && str.includes("-")) {
+    const partes = str.split("-");
+    if (partes.length === 3 && partes[0].length === 4) {
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+  }
+
+  return str;
+}
+
+// --- ENDPOINT PROCESAR LISTADO ---
+app.post(
+  "/api/procesar-listado",
+  upload.single("archivo"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No se subió ningún archivo" });
+      }
+
+      // Convertir buffer CSV
+      const contenidoCsv = req.file.buffer.toString("latin1");
+      const lineas = contenidoCsv
+        .split(/\r?\n/)
+        .filter((linea) => linea.trim() !== "");
+
+      const primeraLinea = lineas[0].toLowerCase().includes("sep=") ? 1 : 0;
+      const encabezados = lineas[primeraLinea]
+        .split(";")
+        .map((h) => h.trim().replace(/^"|"$/g, ""));
+
+      const matriculados = [];
+      const renovados = [];
+
+      for (let i = primeraLinea + 1; i < lineas.length; i++) {
+        const valores = lineas[i]
+          .split(";")
+          .map((v) => v.trim().replace(/^"|"$/g, ""));
+        if (valores.length < encabezados.length) continue;
+
+        const filaObj = {};
+        encabezados.forEach((header, index) => {
+          filaObj[header] = valores[index];
+        });
+
+        // Extraer columnas deseadas preservando ceros a la izquierda y formatos limpios
+        const filaFiltrada = {};
+        COLUMNAS_DESEADAS.forEach((col) => {
+          let val = filaObj[col] !== undefined ? filaObj[col] : "";
+
+          // Formatear fechas
+          if (
+            col.toUpperCase().includes("FEC") ||
+            col.toUpperCase().includes("FECHA")
+          ) {
+            val = formatearFecha(val);
+          }
+
+          filaFiltrada[col] = String(val).trim();
+        });
+
+        const fecMat = String(filaObj["FEC-MATRICULA"] || "").trim();
+        const fecRen = String(filaObj["FEC-RENOVACION"] || "").trim();
+
+        if (fecMat && fecRen && fecMat === fecRen) {
+          matriculados.push(filaFiltrada);
+        } else {
+          renovados.push(filaFiltrada);
+        }
+      }
+
+      const workbook = new ExcelJS.Workbook();
+
+      const agregarYFormatearPestana = (nombrePestana, datos) => {
+        const sheet = workbook.addWorksheet(nombrePestana);
+
+        // Asegurar que las cuadrículas sean visibles siempre
+        sheet.views = [{ showGridLines: true }];
+
+        // 1. Agregar Encabezados
+        sheet.addRow(COLUMNAS_DESEADAS);
+
+        // 2. Agregar Filas de Datos
+        datos.forEach((row) => {
+          const valoresFila = COLUMNAS_DESEADAS.map((col) => row[col] || "");
+          sheet.addRow(valoresFila);
+        });
+
+        // Estilo Encabezado (Texto en Negrita, Fondo Blanco, Centrado)
+        const headerRow = sheet.getRow(1);
+        headerRow.font = {
+          name: "Aptos Narrow",
+          bold: false,
+          color: { argb: "000000" },
+          size: 11,
+        };
+        headerRow.alignment = { vertical: "middle", horizontal: "left" };
+
+        const totalFilas = datos.length + 1;
+        const totalColumnas = COLUMNAS_DESEADAS.length;
+
+        // 3. Aplicar BORDES NEGROS/GRISES FINOS Y ALINEACIÓN
+        for (let r = 1; r <= totalFilas; r++) {
+          const row = sheet.getRow(r);
+          row.height = 20; // Altura cómoda para la fila
+
+          for (let c = 1; c <= totalColumnas; c++) {
+            const cell = row.getCell(c);
+
+            // Forzar formato de texto para evitar notaciones científicas (ej: 9.02E+09)
+            cell.numFmt = "@";
+
+            cell.border = {
+              top: { style: "thin", color: { argb: "808080" } },
+              left: { style: "thin", color: { argb: "808080" } },
+              bottom: { style: "thin", color: { argb: "808080" } },
+              right: { style: "thin", color: { argb: "808080" } },
+            };
+
+            if (r > 1) {
+              cell.font = { name: "Aptos Narrow", size: 11 };
+              cell.alignment = { vertical: "middle" };
+            }
+          }
+        }
+
+        // 4. Auto-espaciado dinámico de columnas (Calcula ancho perfecto según el contenido)
+        COLUMNAS_DESEADAS.forEach((colName, index) => {
+          const colIndex = index + 1;
+          let maxLen = colName.length;
+
+          for (let r = 1; r <= totalFilas; r++) {
+            const cellVal = sheet.getRow(r).getCell(colIndex).value;
+            if (cellVal) {
+              const len = String(cellVal).length;
+              if (len > maxLen) maxLen = len;
+            }
+          }
+
+          // Le agregamos 3 puntos de margen para que la celda se vea aireada como en tu imagen
+          sheet.getColumn(colIndex).width = Math.max(maxLen + 3, 12);
+        });
+      };
+
+      agregarYFormatearPestana("RENOVADOS", renovados);
+      agregarYFormatearPestana("MATRICULADOS", matriculados);
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="Matriculados_y_Renovados_Filtrado.xlsx"',
+      );
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error("Error procesando archivo:", error);
+      res
+        .status(500)
+        .json({ error: "Error interno al procesar el archivo Excel" });
+    }
+  },
+);
 app.listen(PORT, () => {
   console.log(`Servidor con SQLite corriendo en http://localhost:${PORT}`);
 });

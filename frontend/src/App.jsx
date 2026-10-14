@@ -5,6 +5,7 @@ import FormularioFotovoltaico from "./FormularioFotovoltaico";
 import PrestamoEquiposView from "./PrestamoEquiposView";
 import AutomatizacionesView from "./AutomatizacionesView";
 import ServiciosInformaticosView from "./ServiciosInformaticosView";
+import ProcesadorReportesView from "./ProcesadorReportesView"; // 👈 1. Importación agregada
 
 function App() {
   const [moduloActivo, setModuloActivo] = useState("tareas");
@@ -257,6 +258,7 @@ function App() {
               {[
                 { id: "tareas", label: "TABLERO TAREAS" },
                 { id: "proyectos", label: "PROYECTOS" },
+                { id: "reportes", label: "PROCESADOR REPORTES" }, // 👈 2. Pestaña en el menú
                 { id: "fotovoltaico", label: "INFORME FOTOVOLTAICO" },
                 { id: "prestamos", label: "PRÉSTAMO DE EQUIPOS" },
                 { id: "automatizaciones", label: "AUTOMATIZACIONES" },
@@ -320,7 +322,16 @@ function App() {
         </main>
       )}
 
-      {/* MÓDULO 3: INFORME FOTOVOLTAICO */}
+      {/* MÓDULO 3: PROCESADOR DE REPORTES (MATRICULADOS Y RENOVADOS) */}
+      {moduloActivo === "reportes" && ( // 👈 3. Vista del procesador
+        <main
+          style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 40px" }}
+        >
+          <ProcesadorReportesView />
+        </main>
+      )}
+
+      {/* MÓDULO 4: INFORME FOTOVOLTAICO */}
       {moduloActivo === "fotovoltaico" && (
         <main
           style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 40px" }}
@@ -451,11 +462,11 @@ function App() {
                         </button>
 
                         <button
-                          onClick={() => {
+                          onClick={() =>
                             alert(
                               "Informe guardado exitosamente en el historial",
-                            );
-                          }}
+                            )
+                          }
                           style={{
                             padding: "10px 18px",
                             backgroundColor: "#2563eb",
@@ -506,7 +517,7 @@ function App() {
         </main>
       )}
 
-      {/* MÓDULO 4: PRÉSTAMO DE EQUIPOS */}
+      {/* MÓDULO 5: PRÉSTAMO DE EQUIPOS */}
       {moduloActivo === "prestamos" && (
         <main
           style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 40px" }}
@@ -515,14 +526,14 @@ function App() {
         </main>
       )}
 
-      {/* MÓDULO 5: AUTOMATIZACIONES */}
+      {/* MÓDULO 6: AUTOMATIZACIONES */}
       {moduloActivo === "automatizaciones" && (
         <main style={{ padding: "0 40px" }}>
           <AutomatizacionesView />
         </main>
       )}
 
-      {/* MÓDULO 6: SERVICIOS INFORMÁTICOS */}
+      {/* MÓDULO 7: SERVICIOS INFORMÁTICOS */}
       {moduloActivo === "servicios" && (
         <main
           style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 40px" }}
