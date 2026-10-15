@@ -5,8 +5,14 @@ const multer = require("multer");
 const ExcelJS = require("exceljs");
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Inicialización limpia para PostgreSQL
-const prisma = new PrismaClient();
+// Pasamos la URL directamente para asegurar que Prisma la detecte en Render
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
