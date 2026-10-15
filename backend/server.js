@@ -1,18 +1,15 @@
 const express = require("express");
 const cors = require("cors");
-const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
 const { PrismaClient } = require("@prisma/client");
 const multer = require("multer");
 const ExcelJS = require("exceljs");
 const upload = multer({ storage: multer.memoryStorage() });
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL || "file:./dev.db",
-});
-const prisma = new PrismaClient({ adapter });
+// Inicialización limpia para PostgreSQL
+const prisma = new PrismaClient();
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
