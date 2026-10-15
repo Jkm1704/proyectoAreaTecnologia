@@ -5,13 +5,9 @@ const multer = require("multer");
 const ExcelJS = require("exceljs");
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Pasamos la URL directamente para asegurar que Prisma la detecte en Render
+// Inicialización compatible con Prisma v7
 const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
+  datasourceUrl: process.env.DATABASE_URL,
 });
 
 const app = express();
