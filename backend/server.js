@@ -1,14 +1,15 @@
 const express = require("express");
 const cors = require("cors");
+const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
 const { PrismaClient } = require("@prisma/client");
 const multer = require("multer");
 const ExcelJS = require("exceljs");
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Inicialización compatible con Prisma v7
-const prisma = new PrismaClient({
-  datasourceUrl: process.env.DATABASE_URL,
+const adapter = new PrismaBetterSqlite3({
+  url: process.env.DATABASE_URL || "file:./dev.db",
 });
+const prisma = new PrismaClient({ adapter });
 
 const app = express();
 const PORT = process.env.PORT || 5000;

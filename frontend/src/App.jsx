@@ -1,21 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TableroTareasView from "./TableroTareasView";
 import InformeFotovoltaicoView from "./InformeFotovoltaicoView";
 import FormularioFotovoltaico from "./FormularioFotovoltaico";
 import PrestamoEquiposView from "./PrestamoEquiposView";
 import AutomatizacionesView from "./AutomatizacionesView";
 import ServiciosInformaticosView from "./ServiciosInformaticosView";
-import ProcesadorReportesView from "./ProcesadorReportesView"; // 👈 1. Importación agregada
+import ProcesadorReportesView from "./ProcesadorReportesView";
 
 function App() {
-  const [moduloActivo, setModuloActivo] = useState("tareas");
-  const [subModuloFotovoltaico, setSubModuloFotovoltaico] =
-    useState("realizar");
+  // 1. Guardar y recordar en qué pestaña/módulo quedó el usuario al recargar (F5)
+  const [moduloActivo, setModuloActivo] = useState(() => {
+    return localStorage.getItem("modulo_activo") || "tareas";
+  });
+
+  const [subModuloFotovoltaico, setSubModuloFotovoltaico] = useState("realizar");
   const [informeGenerado, setInformeGenerado] = useState(null);
 
-  // Estado para abrir/cerrar el desplegable de notificaciones
   const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false);
   const [hoveredNav, setHoveredNav] = useState(null);
+
+  // 2. Actualizar localStorage cada vez que el usuario cambia de pestaña
+  useEffect(() => {
+    localStorage.setItem("modulo_activo", moduloActivo);
+  }, [moduloActivo]);
 
   return (
     <div
@@ -30,7 +37,7 @@ function App() {
     >
       {/* HEADER DIVIDIDO EN DOS FRANJAS */}
       <header style={{ width: "100%", marginBottom: "20px" }}>
-        {/* 1. FRANJA SUPERIOR (AZUL OSCURO) */}
+        {/* FRANJA SUPERIOR (AZUL OSCURO) */}
         <div
           style={{
             backgroundColor: "#0a192f",
@@ -242,7 +249,7 @@ function App() {
           </div>
         </div>
 
-        {/* 2. FRANJA INFERIOR (BLANCA) CON NAVEGACIÓN */}
+        {/* FRANJA INFERIOR (BLANCA) CON NAVEGACIÓN */}
         <div
           style={{
             backgroundColor: "#ffffff",
@@ -258,7 +265,7 @@ function App() {
               {[
                 { id: "tareas", label: "TABLERO TAREAS" },
                 { id: "proyectos", label: "PROYECTOS" },
-                { id: "reportes", label: "PROCESADOR REPORTES" }, // 👈 2. Pestaña en el menú
+                { id: "reportes", label: "PROCESADOR REPORTES" },
                 { id: "fotovoltaico", label: "INFORME FOTOVOLTAICO" },
                 { id: "prestamos", label: "PRÉSTAMO DE EQUIPOS" },
                 { id: "automatizaciones", label: "AUTOMATIZACIONES" },
@@ -322,8 +329,8 @@ function App() {
         </main>
       )}
 
-      {/* MÓDULO 3: PROCESADOR DE REPORTES (MATRICULADOS Y RENOVADOS) */}
-      {moduloActivo === "reportes" && ( // 👈 3. Vista del procesador
+      {/* MÓDULO 3: PROCESADOR DE REPORTES */}
+      {moduloActivo === "reportes" && (
         <main
           style={{ maxWidth: "1600px", margin: "0 auto", padding: "0 40px" }}
         >
@@ -464,7 +471,7 @@ function App() {
                         <button
                           onClick={() =>
                             alert(
-                              "Informe guardado exitosamente en el historial",
+                              "Informe guardado exitosamente en el historial"
                             )
                           }
                           style={{

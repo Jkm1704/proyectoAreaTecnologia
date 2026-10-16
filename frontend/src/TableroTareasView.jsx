@@ -1,42 +1,93 @@
 import { useState, useEffect } from "react";
 
+// Datos por defecto iniciales si no hay nada guardado en localStorage
+const datosIniciales = [
+  {
+    id: 1,
+    titulo: "📌 Proyecto Principal",
+    tarjetas: [
+      {
+        id: 101,
+        titulo: "Por Hacer",
+        tareas: [
+          {
+            id: 1001,
+            texto: "Revisar despliegue en Render",
+            etiqueta: "Urgente",
+            colorEtiqueta: "#ef4444",
+          },
+        ],
+      },
+      { id: 102, titulo: "En Proceso", tareas: [] },
+      { id: 103, titulo: "Completado", tareas: [] },
+    ],
+  },
+];
+
 function TableroTareasView() {
-  const [tableros, setTableros] = useState([]);
-  const [tableroActivoId, setTableroActivoId] = useState(null);
+  // 1. Cargar tableros inicialmente desde localStorage
+  const [tableros, setTableros] = useState(() => {
+    const guardado = localStorage.getItem("mis_tableros_tareas");
+    return guardado ? JSON.parse(guardado) : datosIniciales;
+  });
 
-  // Input para crear un nuevo Tablero
+  // 2. Cargar el ID del tablero activo desde localStorage
+  const [tableroActivoId, setTableroActivoId] = useState(() => {
+    const activoGuardado = localStorage.getItem("tablero_activo_id");
+    if (activoGuardado) return Number(activoGuardado);
+    const guardado = localStorage.getItem("mis_tableros_tareas");
+    const parsed = guardado ? JSON.parse(guardado) : datosIniciales;
+    return parsed.length > 0 ? parsed[0].id : null;
+  });
+
+  // Inputs para formularios
   const [nuevoTituloTablero, setNuevoTituloTablero] = useState("");
-
-  // Input para crear una nueva Tarjeta (Columna) dentro del tablero activo
   const [nuevoTituloTarjeta, setNuevoTituloTarjeta] = useState("");
 
-  // Estados para controlar los inputs de creación de Tareas (por cada tarjeta)
   const [textoNuevaTarea, setTextoNuevaTarea] = useState({});
   const [etiquetaTarea, setEtiquetaTarea] = useState({});
   const [colorEtiqueta, setColorEtiqueta] = useState({});
 
-  // Cargar Tableros desde Backend
+  // 3. Guardar en localStorage cada vez que los tableros cambien
+  useEffect(() => {
+    localStorage.setItem("mis_tableros_tareas", JSON.stringify(tableros));
+  }, [tableros]);
+
+  // 4. Guardar en localStorage el ID del tablero activo seleccionado
+  useEffect(() => {
+    if (tableroActivoId) {
+      localStorage.setItem("tablero_activo_id", tableroActivoId);
+    }
+  }, [tableroActivoId]);
+
+  // Intentar cargar desde Backend si está disponible, sin sobreescribir si falla
   useEffect(() => {
     fetch("http://127.0.0.1:5000/api/tableros")
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error("Servidor no disponible");
+      })
       .then((data) => {
-        setTableros(data);
-        if (data.length > 0) {
-          // Usamos 'prev' para verificar el estado sin depender de la variable externa
+        if (Array.isArray(data) && data.length > 0) {
+          setTableros(data);
           setTableroActivoId((prev) => (prev ? prev : data[0].id));
         }
       })
-      .catch((err) => console.error("Error cargando tableros:", err));
+      .catch(() => {
+        console.log("Servidor backend offline: usando datos de localStorage");
+      });
   }, []);
 
-  // Helper para guardar cambios en Backend
+  // Helper para guardar cambios en estado y servidor
   const guardarEnBackend = (nuevosTableros) => {
     setTableros(nuevosTableros);
+    localStorage.setItem("mis_tableros_tareas", JSON.stringify(nuevosTableros));
+
     fetch("http://127.0.0.1:5000/api/tableros", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nuevosTableros),
-    }).catch((err) => console.error("Error guardando:", err));
+    }).catch((err) => console.log("Modo local: no se envió al servidor", err));
   };
 
   // -------------------------------------------------------------
@@ -49,7 +100,7 @@ function TableroTareasView() {
     const nuevoTablero = {
       id: Date.now(),
       titulo: nuevoTituloTablero,
-      tarjetas: [], // Cada tablero tiene sus propias tarjetas/columnas
+      tarjetas: [],
     };
 
     const nuevos = [...tableros, nuevoTablero];
@@ -143,7 +194,6 @@ function TableroTareasView() {
 
     guardarEnBackend(nuevosTableros);
 
-    // Limpiar inputs específicos de la tarjeta
     setTextoNuevaTarea({ ...textoNuevaTarea, [tarjetaId]: "" });
     setEtiquetaTarea({ ...etiquetaTarea, [tarjetaId]: "" });
   };

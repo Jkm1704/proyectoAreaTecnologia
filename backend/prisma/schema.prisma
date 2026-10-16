@@ -3,11 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-
+  provider = "sqlite"
 }
 
-// --- MÓDULO TABLEROS Y TARJETAS ---
+
 model Tablero {
   id       Int       @id @default(autoincrement())
   titulo   String
@@ -31,8 +30,6 @@ model Tarea {
   tarjeta       Tarjeta @relation(fields: [tarjetaId], references: [id], onDelete: Cascade)
 }
 
-// --- MÓDULO DE PRÉSTAMOS Y EQUIPOS ---
-
 model Equipo {
   id        Int    @id @default(autoincrement())
   nombre    String
@@ -41,9 +38,9 @@ model Equipo {
 }
 
 model Prestamo {
-  id              Int     @id @default(autoincrement())
+  id              Int    @id @default(autoincrement())
   equipoId        Int
   solicitante     String
   fechaPrestamo   String
-  fechaDevolucion String?
+  fechaDevolucion String
 }
