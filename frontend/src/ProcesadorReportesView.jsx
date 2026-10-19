@@ -13,12 +13,13 @@ function ProcesadorReportesView() {
 
     setCargando(true);
     try {
-      const response = await fetch('https://proyectoareatecnologia.onrender.com', {
+      // 👈 AQUÍ ESTÁ LA CORRECCIÓN: Se agrega /api/procesar-listado al final
+      const response = await fetch('https://proyectoareatecnologia.onrender.com/api/procesar-listado', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Error en el procesamiento');
+      if (!response.ok) throw new Error('Error en el procesamiento del servidor');
 
       // Descargar el Excel directamente
       const blob = await response.blob();
