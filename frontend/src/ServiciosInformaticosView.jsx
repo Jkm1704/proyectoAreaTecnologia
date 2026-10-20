@@ -16,7 +16,7 @@ export default function ServiciosInformaticosView() {
       {/* Título Principal */}
       <div style={{ marginBottom: "20px" }}>
         <h2 style={{ color: "#64ffda", margin: 0 }}>
-          🖥️ Servicios Informáticos
+           Servicios Informáticos
         </h2>
         <p style={{ color: "#8892b0", fontSize: "14px", marginTop: "5px" }}>
           Gestión de soporte técnico, mantenimiento de infraestructura y licencias de software.
@@ -46,7 +46,7 @@ export default function ServiciosInformaticosView() {
             transition: "all 0.2s",
           }}
         >
-          🎫 Tickets de Soporte
+           Tickets de Soporte
         </button>
 
         <button
@@ -62,7 +62,7 @@ export default function ServiciosInformaticosView() {
             transition: "all 0.2s",
           }}
         >
-          🛠️ Mantenimiento Técnico
+           Mantenimiento Técnico
         </button>
 
         <button
@@ -78,7 +78,7 @@ export default function ServiciosInformaticosView() {
             transition: "all 0.2s",
           }}
         >
-          🔑 Licencias & Software
+           Licencias & Software
         </button>
       </div>
 

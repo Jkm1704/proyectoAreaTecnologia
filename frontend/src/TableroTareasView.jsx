@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_URL } from "./config";
 
 // Datos por defecto iniciales si no hay nada guardado en localStorage
 const datosIniciales = [
@@ -62,7 +63,7 @@ function TableroTareasView() {
 
   // Intentar cargar desde Backend si está disponible, sin sobreescribir si falla
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/api/tableros")
+    fetch(`${API_URL}/api/tableros`)
       .then((res) => {
         if (res.ok) return res.json();
         throw new Error("Servidor no disponible");
@@ -83,7 +84,7 @@ function TableroTareasView() {
     setTableros(nuevosTableros);
     localStorage.setItem("mis_tableros_tareas", JSON.stringify(nuevosTableros));
 
-    fetch("http://127.0.0.1:5000/api/tableros", {
+    fetch(`${API_URL}/api/tableros`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nuevosTableros),

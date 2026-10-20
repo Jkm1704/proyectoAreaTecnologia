@@ -80,7 +80,7 @@ function AutomatizacionesView() {
         }}
       >
         <h2 style={{ color: "#64ffda", marginTop: 0, marginBottom: "10px" }}>
-          ⚡ Propuestas de Automatización
+          Propuestas de Automatización
         </h2>
         <p style={{ color: "#8892b0", fontSize: "14px", marginBottom: "25px" }}>
           Registra y vota ideas para automatizar procesos repetitivos en la empresa.

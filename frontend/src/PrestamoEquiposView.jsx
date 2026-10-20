@@ -1,21 +1,24 @@
 import { useState, useEffect } from "react";
 import FormularioPrestamo from "./FormularioPrestamo";
 import FormularioEquipo from "./FormularioEquipo";
+import { API_URL } from "./config"; // 👈 1. Importamos la variable global de entorno
 
-const API_URL = "http://localhost:5000/api/prestamos-data"; // Ajusta el puerto de tu server (3000, 4000, 5000...)
+// 👈 2. Construimos el endpoint dinámico según estemos en Local o en Render
+const API_ENDPOINT = `${API_URL}/api/prestamos-data`;
 
 function PrestamoEquiposView() {
   const [vistaActual, setVistaActual] = useState("lista");
   const [equipos, setEquipos] = useState([]);
   const [prestamos, setPrestamos] = useState([]);
   const [cargando, setCargando] = useState(true);
-// 1. Cargar datos del server.js (prestamos.json) al montar
+
+  // 1. Cargar datos del servidor al montar el componente
   useEffect(() => {
     let montado = true;
 
     const cargarDatos = async () => {
       try {
-        const res = await fetch(API_URL);
+        const res = await fetch(API_ENDPOINT);
         const data = await res.json();
         if (montado) {
           setEquipos(data.equipos || []);
@@ -37,11 +40,10 @@ function PrestamoEquiposView() {
     };
   }, []);
 
-
-  // 2. Función helper para guardar en prestamos.json vía backend
+  // 2. Función helper para guardar vía backend
   const persistirDatos = async (nuevosEquipos, nuevosPrestamos) => {
     try {
-      await fetch(API_URL, {
+      await fetch(API_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,7 +76,7 @@ function PrestamoEquiposView() {
     const nuevosEquipos = equipos.map((eq) =>
       eq.id === Number(nuevoPrestamo.equipoId)
         ? { ...eq, estado: "En Préstamo" }
-        : eq,
+        : eq
     );
 
     setPrestamos(nuevosPrestamos);
@@ -86,10 +88,10 @@ function PrestamoEquiposView() {
   // Registrar devolución
   const handleMarcarDevuelto = (idPrestamo, equipoId) => {
     const nuevosPrestamos = prestamos.map((item) =>
-      item.id === idPrestamo ? { ...item, estado: "Devuelto" } : item,
+      item.id === idPrestamo ? { ...item, estado: "Devuelto" } : item
     );
     const nuevosEquipos = equipos.map((eq) =>
-      eq.id === Number(equipoId) ? { ...eq, estado: "Disponible" } : eq,
+      eq.id === Number(equipoId) ? { ...eq, estado: "Disponible" } : eq
     );
 
     setPrestamos(nuevosPrestamos);
@@ -133,7 +135,7 @@ function PrestamoEquiposView() {
               fontSize: "0.85rem",
             }}
           >
-            Persistencia en prestamos.json vía Node Backend
+            Persistencia vía Node Backend / Prisma
           </p>
         </div>
 

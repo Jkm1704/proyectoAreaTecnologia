@@ -15,7 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());
+// Permite recibir JSONs pesados de hasta 100 Megabytes
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
 // --- DATOS INICIALES POR DEFECTO ---
 const datosInicialesTableros = [
@@ -46,7 +48,6 @@ const datosInicialesTableros = [
   },
 ];
 
-// Auxiliar para sembrar datos iniciales si la BD está vacía
 async function sembrarDatosIniciales() {
   for (const tablero of datosInicialesTableros) {
     await prisma.tablero.create({
@@ -72,8 +73,6 @@ async function sembrarDatosIniciales() {
 // ==========================================
 // 📌 MÓDULO TABLEROS (TRELLO)
 // ==========================================
-
-// GET: Leer listas, tarjetas y tareas
 app.get("/api/tableros", async (req, res) => {
   try {
     let tableros = await prisma.tablero.findMany({
@@ -99,7 +98,6 @@ app.get("/api/tableros", async (req, res) => {
       });
     }
 
-    // Adaptar estructura limpia para React
     const respuestaFormateada = tableros.map((t) => ({
       id: t.id,
       titulo: t.titulo,
@@ -122,7 +120,6 @@ app.get("/api/tableros", async (req, res) => {
   }
 });
 
-// POST: Guardar todo el estado (Niveles: Tablero -> Tarjetas -> Tareas)
 app.post("/api/tableros", async (req, res) => {
   const nuevosTableros = req.body;
 
@@ -163,7 +160,6 @@ app.post("/api/tableros", async (req, res) => {
 // ==========================================
 // 📌 MÓDULO DE PRÉSTAMOS Y EQUIPOS
 // ==========================================
-
 app.get("/api/prestamos-data", async (req, res) => {
   try {
     const equipos = await prisma.equipo.findMany();
@@ -212,7 +208,7 @@ app.post("/api/prestamos-data", async (req, res) => {
   }
 });
 
-// Columnas objetivo
+// --- ESTRUCTURA DE COLUMNAS PARA REPORTES ---
 const COLUMNAS_DESEADAS = [
   "MATRICULA",
   "ORGANIZACION",
@@ -242,17 +238,40 @@ const COLUMNAS_DESEADAS = [
   "TAM-EMPRESA",
   "PERSONAL",
 ];
-// --- FUNCIÓN DE FORMATEO DE FECHAS (DD/MM/YYYY) ---
+
+const COLUMNAS_BASE = [
+  "MATRICULA",
+  "ORGANIZACION",
+  "EST-MATRICULA",
+  "RAZON SOCIAL",
+  "NOMBRE 1",
+  "NOMBRE 2",
+  "APELLIDO 1",
+  "APELLIDO 2",
+  "NIT",
+  "FEC-MATRICULA",
+  "FEC-RENOVACION",
+  "ULT-ANO_REN",
+  "DIR-COMERCIAL",
+  "BARRIO-COMERCIAL",
+  "MUN-COMERCIAL",
+  "TEL-COM-1",
+  "EMAIL-COMERCIAL",
+  "SECTORES",
+  "CIIU-1",
+  "ACTIVIDAD ECONOMICA",
+  "TAM-EMPRESA",
+  "PERSONAL",
+];
+
 function formatearFecha(val) {
   if (!val) return "";
   const str = String(val).trim();
 
-  // Caso YYYYMMDD (ej: 20261013)
   if (str.length === 8 && /^\d+$/.test(str)) {
     return `${str.substring(6, 8)}/${str.substring(4, 6)}/${str.substring(0, 4)}`;
   }
 
-  // Caso YYYY-MM-DD (ej: 2026-10-13)
   if (str.length === 10 && str.includes("-")) {
     const partes = str.split("-");
     if (partes.length === 3 && partes[0].length === 4) {
@@ -263,7 +282,63 @@ function formatearFecha(val) {
   return str;
 }
 
-// --- ENDPOINT PROCESAR LISTADO ---
+function parsearCsvLineas(buffer) {
+  let contenido = buffer.toString("latin1");
+
+  if (
+    contenido.toLowerCase().startsWith("sep=") ||
+    contenido.startsWith("﻿sep=")
+  ) {
+    contenido = contenido.substring(contenido.indexOf("\n") + 1);
+  }
+
+  const lineas = [];
+  let lineaActual = "";
+  let dentroDeComillas = false;
+
+  for (let i = 0; i < contenido.length; i++) {
+    const char = contenido[i];
+
+    if (char === '"') {
+      dentroDeComillas = !dentroDeComillas;
+      lineaActual += char;
+    } else if ((char === "\n" || char === "\r") && !dentroDeComillas) {
+      if (lineaActual.trim().length > 0) {
+        lineas.push(lineaActual);
+      }
+      lineaActual = "";
+    } else {
+      lineaActual += char;
+    }
+  }
+  if (lineaActual.trim().length > 0) {
+    lineas.push(lineaActual);
+  }
+
+  if (lineas.length === 0) return [];
+
+  const encabezados = lineas[0]
+    .split(";")
+    .map((h) => h.trim().replace(/^"|"$/g, ""));
+  const datos = [];
+
+  for (let i = 1; i < lineas.length; i++) {
+    const valores = lineas[i]
+      .split(";")
+      .map((v) => v.trim().replace(/^"|"$/g, ""));
+    const filaObj = {};
+    encabezados.forEach((header, index) => {
+      filaObj[header] = valores[index] !== undefined ? valores[index] : "";
+    });
+    datos.push(filaObj);
+  }
+
+  return datos;
+}
+
+// ==========================================
+// 📌 1. ENDPOINT: MATRICULADOS Y RENOVADOS
+// ==========================================
 app.post(
   "/api/procesar-listado",
   upload.single("archivo"),
@@ -273,37 +348,15 @@ app.post(
         return res.status(400).json({ error: "No se subió ningún archivo" });
       }
 
-      // Convertir buffer CSV
-      const contenidoCsv = req.file.buffer.toString("latin1");
-      const lineas = contenidoCsv
-        .split(/\r?\n/)
-        .filter((linea) => linea.trim() !== "");
-
-      const primeraLinea = lineas[0].toLowerCase().includes("sep=") ? 1 : 0;
-      const encabezados = lineas[primeraLinea]
-        .split(";")
-        .map((h) => h.trim().replace(/^"|"$/g, ""));
-
+      const datosBrutos = parsearCsvLineas(req.file.buffer);
       const matriculados = [];
       const renovados = [];
 
-      for (let i = primeraLinea + 1; i < lineas.length; i++) {
-        const valores = lineas[i]
-          .split(";")
-          .map((v) => v.trim().replace(/^"|"$/g, ""));
-        if (valores.length < encabezados.length) continue;
-
-        const filaObj = {};
-        encabezados.forEach((header, index) => {
-          filaObj[header] = valores[index];
-        });
-
-        // Extraer columnas deseadas preservando ceros a la izquierda y formatos limpios
+      datosBrutos.forEach((filaObj) => {
         const filaFiltrada = {};
         COLUMNAS_DESEADAS.forEach((col) => {
           let val = filaObj[col] !== undefined ? filaObj[col] : "";
 
-          // Formatear fechas
           if (
             col.toUpperCase().includes("FEC") ||
             col.toUpperCase().includes("FECHA")
@@ -322,49 +375,35 @@ app.post(
         } else {
           renovados.push(filaFiltrada);
         }
-      }
+      });
 
       const workbook = new ExcelJS.Workbook();
 
       const agregarYFormatearPestana = (nombrePestana, datos) => {
         const sheet = workbook.addWorksheet(nombrePestana);
-
-        // Asegurar que las cuadrículas sean visibles siempre
         sheet.views = [{ showGridLines: true }];
 
-        // 1. Agregar Encabezados
         sheet.addRow(COLUMNAS_DESEADAS);
 
-        // 2. Agregar Filas de Datos
         datos.forEach((row) => {
           const valoresFila = COLUMNAS_DESEADAS.map((col) => row[col] || "");
           sheet.addRow(valoresFila);
         });
 
-        // Estilo Encabezado (Texto en Negrita, Fondo Blanco, Centrado)
         const headerRow = sheet.getRow(1);
-        headerRow.font = {
-          name: "Aptos Narrow",
-          bold: false,
-          color: { argb: "000000" },
-          size: 11,
-        };
+        headerRow.font = { name: "Aptos Narrow", bold: false, size: 11 };
         headerRow.alignment = { vertical: "middle", horizontal: "left" };
 
         const totalFilas = datos.length + 1;
         const totalColumnas = COLUMNAS_DESEADAS.length;
 
-        // 3. Aplicar BORDES NEGROS/GRISES FINOS Y ALINEACIÓN
         for (let r = 1; r <= totalFilas; r++) {
           const row = sheet.getRow(r);
-          row.height = 20; // Altura cómoda para la fila
+          row.height = 20;
 
           for (let c = 1; c <= totalColumnas; c++) {
             const cell = row.getCell(c);
-
-            // Forzar formato de texto para evitar notaciones científicas (ej: 9.02E+09)
             cell.numFmt = "@";
-
             cell.border = {
               top: { style: "thin", color: { argb: "808080" } },
               left: { style: "thin", color: { argb: "808080" } },
@@ -379,7 +418,6 @@ app.post(
           }
         }
 
-        // 4. Auto-espaciado dinámico de columnas (Calcula ancho perfecto según el contenido)
         COLUMNAS_DESEADAS.forEach((colName, index) => {
           const colIndex = index + 1;
           let maxLen = colName.length;
@@ -392,7 +430,6 @@ app.post(
             }
           }
 
-          // Le agregamos 3 puntos de margen para que la celda se vea aireada como en tu imagen
           sheet.getColumn(colIndex).width = Math.max(maxLen + 3, 12);
         });
       };
@@ -419,6 +456,117 @@ app.post(
     }
   },
 );
+
+// ==========================================
+// 📌 2. NUEVO ENDPOINT: GENERAR EXCEL DESDE JSON
+// ==========================================
+app.post("/api/generar-excel-base", async (req, res) => {
+  try {
+    const { datos = [] } = req.body;
+
+    const datosProcesados = datos.map((fila) => {
+      const ciiuFila = String(fila["CIIU-1"] || "").trim();
+      const sectorFila = ciiuFila ? ciiuFila.charAt(0).toUpperCase() : "";
+
+      return {
+        MATRICULA: fila["MATRICULA"] || "",
+        ORGANIZACION: fila["ORGANIZACION"] || "",
+        "EST-MATRICULA": fila["EST-MATRICULA"] || "",
+        "RAZON SOCIAL": fila["RAZON SOCIAL"] || "",
+        "NOMBRE 1": fila["NOMBRE 1"] || "",
+        "NOMBRE 2": fila["NOMBRE 2"] || "",
+        "APELLIDO 1": fila["APELLIDO 1"] || "",
+        "APELLIDO 2": fila["APELLIDO 2"] || "",
+        NIT: fila["NIT"] || "",
+        "FEC-MATRICULA": formatearFecha(fila["FEC-MATRICULA"]),
+        "FEC-RENOVACION": formatearFecha(fila["FEC-RENOVACION"]),
+        "ULT-ANO_REN": fila["ULT-ANO_REN"] || "",
+        "DIR-COMERCIAL": fila["DIR-COMERCIAL"] || "",
+        "BARRIO-COMERCIAL": fila["BARRIO-COMERCIAL"] || "",
+        "MUN-COMERCIAL": fila["MUN-COMERCIAL"] || "",
+        "TEL-COM-1": fila["TEL-COM-1"] || "",
+        "EMAIL-COMERCIAL": fila["EMAIL-COMERCIAL"] || "",
+        SECTORES: sectorFila,
+        "CIIU-1": ciiuFila,
+        "ACTIVIDAD ECONOMICA": fila["ACTIVIDAD"] || "",
+        "TAM-EMPRESA": fila["TAM-EMPRESA"] || "",
+        PERSONAL: fila["PERSONAL"] || "0",
+      };
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("PN-PJ-ACTIVOS-R2026");
+    sheet.views = [{ showGridLines: true }];
+
+    sheet.addRow(COLUMNAS_BASE);
+
+    datosProcesados.forEach((row) => {
+      const valoresFila = COLUMNAS_BASE.map((col) => row[col] || "");
+      sheet.addRow(valoresFila);
+    });
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { name: "Aptos Narrow", bold: false, size: 11 };
+    headerRow.alignment = { vertical: "middle", horizontal: "left" };
+
+    const totalFilas = datosProcesados.length + 1;
+    const totalColumnas = COLUMNAS_BASE.length;
+
+    for (let r = 1; r <= totalFilas; r++) {
+      const row = sheet.getRow(r);
+      row.height = 20;
+
+      for (let c = 1; c <= totalColumnas; c++) {
+        const cell = row.getCell(c);
+        cell.numFmt = "@";
+        cell.border = {
+          top: { style: "thin", color: { argb: "808080" } },
+          left: { style: "thin", color: { argb: "808080" } },
+          bottom: { style: "thin", color: { argb: "808080" } },
+          right: { style: "thin", color: { argb: "808080" } },
+        };
+
+        if (r > 1) {
+          cell.font = { name: "Aptos Narrow", size: 11 };
+          cell.alignment = { vertical: "middle" };
+        }
+      }
+    }
+
+    COLUMNAS_BASE.forEach((colName, index) => {
+      const colIndex = index + 1;
+      let maxLen = colName.length;
+
+      for (let r = 1; r <= totalFilas; r++) {
+        const cellVal = sheet.getRow(r).getCell(colIndex).value;
+        if (cellVal) {
+          const len = String(cellVal).length;
+          if (len > maxLen) maxLen = len;
+        }
+      }
+
+      sheet.getColumn(colIndex).width = Math.max(maxLen + 3, 12);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="BASE_FILTRADA_ACTIVOS.xlsx"',
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error generando Excel base:", error);
+    res
+      .status(500)
+      .json({ error: "Error interno al generar el archivo Excel" });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`Servidor con SQLite corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });

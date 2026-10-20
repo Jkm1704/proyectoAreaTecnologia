@@ -59,7 +59,7 @@ function FormularioFotovoltaico({ onGenerarInforme }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ color: "#fff", display: "flex", flexDirection: "column", gap: "20px" }}>
-      <h3 style={{ color: "#64ffda", margin: 0 }}>📋 Datos para el Informe Ejecutivo Energético</h3>
+      <h3 style={{ color: "#64ffda", margin: 0 }}> Datos para el Informe Ejecutivo Energético</h3>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
         <div>
@@ -98,7 +98,7 @@ function FormularioFotovoltaico({ onGenerarInforme }) {
 
       <details style={{ border: "1px solid #233554", borderRadius: "8px", padding: "12px" }}>
         <summary style={{ cursor: "pointer", color: "#64ffda", fontWeight: "bold" }}>
-          ⚙️ Modificar Serie de Datos Diarios y Históricos (Avanzado)
+           Modificar Serie de Datos Diarios y Históricos (Avanzado)
         </summary>
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
           <div>
@@ -121,7 +121,7 @@ function FormularioFotovoltaico({ onGenerarInforme }) {
       </details>
 
       <button type="submit" style={buttonStyle}>
-        ⚡ Generar Informe Ejecutivo
+         Generar Informe Ejecutivo
       </button>
     </form>
   );
