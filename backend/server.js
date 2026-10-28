@@ -282,14 +282,22 @@ function formatearFecha(val) {
   return str;
 }
 
+// ==========================================
+// PARSER ULTRA ROBUSTO DE CSV
+// ==========================================
 function parsearCsvLineas(buffer) {
   let contenido = buffer.toString("latin1");
 
+  // Omitir la directiva "sep=" de Excel si está presente al inicio
   if (
     contenido.toLowerCase().startsWith("sep=") ||
-    contenido.startsWith("﻿sep=")
+    contenido.toLowerCase().startsWith("ï»¿sep=") ||
+    contenido.includes("sep=")
   ) {
-    contenido = contenido.substring(contenido.indexOf("\n") + 1);
+    const primerSalto = contenido.indexOf("\n");
+    if (primerSalto !== -1) {
+      contenido = contenido.substring(primerSalto + 1);
+    }
   }
 
   const lineas = [];
@@ -317,19 +325,29 @@ function parsearCsvLineas(buffer) {
 
   if (lineas.length === 0) return [];
 
-  const encabezados = lineas[0]
-    .split(";")
-    .map((h) => h.trim().replace(/^"|"$/g, ""));
+  // Detectar automáticamente si el separador es ';' o ','
+  const primeraLinea = lineas[0];
+  const separador = primeraLinea.includes(";") ? ";" : ",";
+
+  // Limpiar encabezados de comillas y caracteres residuales
+  const encabezados = primeraLinea
+    .split(separador)
+    .map((h) =>
+      h.trim().replace(/^"|"$/g, "").replace(/\r/g, "").toUpperCase(),
+    );
+
   const datos = [];
 
   for (let i = 1; i < lineas.length; i++) {
     const valores = lineas[i]
-      .split(";")
-      .map((v) => v.trim().replace(/^"|"$/g, ""));
+      .split(separador)
+      .map((v) => v.trim().replace(/^"|"$/g, "").replace(/\r/g, ""));
+
     const filaObj = {};
     encabezados.forEach((header, index) => {
       filaObj[header] = valores[index] !== undefined ? valores[index] : "";
     });
+
     datos.push(filaObj);
   }
 
@@ -354,8 +372,14 @@ app.post(
 
       datosBrutos.forEach((filaObj) => {
         const filaFiltrada = {};
+
         COLUMNAS_DESEADAS.forEach((col) => {
-          let val = filaObj[col] !== undefined ? filaObj[col] : "";
+          // Búsqueda insensible a Mayúsculas/Minúsculas de las columnas
+          const claveExistente = Object.keys(filaObj).find(
+            (k) => k.trim().toUpperCase() === col.toUpperCase(),
+          );
+
+          let val = claveExistente ? filaObj[claveExistente] : "";
 
           if (
             col.toUpperCase().includes("FEC") ||
@@ -367,9 +391,14 @@ app.post(
           filaFiltrada[col] = String(val).trim();
         });
 
-        const fecMat = String(filaObj["FEC-MATRICULA"] || "").trim();
-        const fecRen = String(filaObj["FEC-RENOVACION"] || "").trim();
+        // Ignorar filas vacías
+        const tieneValores = Object.values(filaFiltrada).some((v) => v !== "");
+        if (!tieneValores) return;
 
+        const fecMat = filaFiltrada["FEC-MATRICULA"];
+        const fecRen = filaFiltrada["FEC-RENOVACION"];
+
+        // Comparación de fechas de matrícula y renovación
         if (fecMat && fecRen && fecMat === fecRen) {
           matriculados.push(filaFiltrada);
         } else {
@@ -383,20 +412,19 @@ app.post(
         const sheet = workbook.addWorksheet(nombrePestana);
         sheet.views = [{ showGridLines: true }];
 
+        // Agregar fila de Encabezado
         sheet.addRow(COLUMNAS_DESEADAS);
 
+        // Agregar Filas de Datos
         datos.forEach((row) => {
           const valoresFila = COLUMNAS_DESEADAS.map((col) => row[col] || "");
           sheet.addRow(valoresFila);
         });
 
-        const headerRow = sheet.getRow(1);
-        headerRow.font = { name: "Aptos Narrow", bold: false, size: 11 };
-        headerRow.alignment = { vertical: "middle", horizontal: "left" };
-
         const totalFilas = datos.length + 1;
         const totalColumnas = COLUMNAS_DESEADAS.length;
 
+        // Formato visual de celdas
         for (let r = 1; r <= totalFilas; r++) {
           const row = sheet.getRow(r);
           row.height = 20;
@@ -411,18 +439,22 @@ app.post(
               right: { style: "thin", color: { argb: "808080" } },
             };
 
-            if (r > 1) {
+            if (r === 1) {
+              cell.font = { name: "Aptos Narrow", bold: false, size: 11 };
+              cell.alignment = { vertical: "middle", horizontal: "left" };
+            } else {
               cell.font = { name: "Aptos Narrow", size: 11 };
-              cell.alignment = { vertical: "middle" };
+              cell.alignment = { vertical: "middle", horizontal: "left" };
             }
           }
         }
 
+        // Ancho automático para columnas
         COLUMNAS_DESEADAS.forEach((colName, index) => {
           const colIndex = index + 1;
           let maxLen = colName.length;
 
-          for (let r = 1; r <= totalFilas; r++) {
+          for (let r = 1; r <= Math.min(totalFilas, 100); r++) {
             const cellVal = sheet.getRow(r).getCell(colIndex).value;
             if (cellVal) {
               const len = String(cellVal).length;
@@ -458,7 +490,7 @@ app.post(
 );
 
 // ==========================================
-// 📌 2. NUEVO ENDPOINT: GENERAR EXCEL DESDE JSON
+// 📌 2. ENDPOINT: GENERAR EXCEL DESDE JSON
 // ==========================================
 app.post("/api/generar-excel-base", async (req, res) => {
   try {
@@ -537,7 +569,7 @@ app.post("/api/generar-excel-base", async (req, res) => {
       const colIndex = index + 1;
       let maxLen = colName.length;
 
-      for (let r = 1; r <= totalFilas; r++) {
+      for (let r = 1; r <= Math.min(totalFilas, 100); r++) {
         const cellVal = sheet.getRow(r).getCell(colIndex).value;
         if (cellVal) {
           const len = String(cellVal).length;
