@@ -42,14 +42,18 @@ function ProcesadorReportesView() {
   const [sectoresSeleccionados, setSectoresSeleccionados] = useState([]);
   const [ciiuTexto, setCiiuTexto] = useState("");
 
-  // Función para parsear CSV en el Frontend de forma ultra segura
+  // Parser ultra seguro para el frontend
   const parsearCsvEnNavegador = (textoCsv) => {
     let contenido = textoCsv;
     if (
       contenido.toLowerCase().startsWith("sep=") ||
-      contenido.startsWith("﻿sep=")
+      contenido.toLowerCase().startsWith("ï»¿sep=") ||
+      contenido.includes("sep=")
     ) {
-      contenido = contenido.substring(contenido.indexOf("\n") + 1);
+      const primerSalto = contenido.indexOf("\n");
+      if (primerSalto !== -1) {
+        contenido = contenido.substring(primerSalto + 1);
+      }
     }
 
     const lineas = [];
@@ -72,15 +76,20 @@ function ProcesadorReportesView() {
 
     if (lineas.length === 0) return [];
 
-    const encabezados = lineas[0]
-      .split(";")
-      .map((h) => h.trim().replace(/^"|"$/g, ""));
+    const primeraLinea = lineas[0];
+    const separador = primeraLinea.includes(";") ? ";" : ",";
+
+    const encabezados = primeraLinea
+      .split(separador)
+      .map((h) => h.trim().replace(/^"|"$/g, "").replace(/\r/g, "").toUpperCase());
+
     const datos = [];
 
     for (let i = 1; i < lineas.length; i++) {
       const valores = lineas[i]
-        .split(";")
-        .map((v) => v.trim().replace(/^"|"$/g, ""));
+        .split(separador)
+        .map((v) => v.trim().replace(/^"|"$/g, "").replace(/\r/g, ""));
+
       const filaObj = {};
       encabezados.forEach((header, index) => {
         filaObj[header] = valores[index] !== undefined ? valores[index] : "";
@@ -88,6 +97,14 @@ function ProcesadorReportesView() {
       datos.push(filaObj);
     }
     return datos;
+  };
+
+  // Helper para buscar valor sin importar mayúsculas/minúsculas
+  const obtenerValorFila = (fila, clave) => {
+    const kFound = Object.keys(fila).find(
+      (k) => k.trim().toUpperCase() === clave.toUpperCase()
+    );
+    return kFound ? String(fila[kFound]).trim() : "";
   };
 
   // 1. Reporte Matriculados / Renovados
@@ -123,7 +140,7 @@ function ProcesadorReportesView() {
     }
   };
 
-  // 2. Reporte Excel Base procesado en Frontend
+  // 2. Reporte Excel Base procesado en Frontend (CORREGIDO)
   const handleProcesarBase = async (e) => {
     e.preventDefault();
     if (!archivo) return alert("Por favor selecciona un archivo CSV");
@@ -145,36 +162,48 @@ function ProcesadorReportesView() {
                 .filter((c) => c.length > 0)
             : [];
           const listaSectores = sectoresSeleccionados.map((s) =>
-            s.charAt(0).toUpperCase(),
+            s.charAt(0).toUpperCase()
           );
-          const listaMunicipios = munsSeleccionados.map((m) => {
-            const partes = m.split("-");
-            return (partes.length > 1 ? partes[1] : m).trim().toLowerCase();
-          });
 
-          // Filtrar directamente en React
+          // Normalización mejorada de municipios
+          const listaMunicipios = munsSeleccionados.map((m) => m.toLowerCase().trim());
+
+          // Filtrar directamente en React con lógica flexible
           const datosFiltrados = datosBrutos.filter((fila) => {
-            const ultAnoFila = String(fila["ULT-ANO_REN"] || "").trim();
-            const munFila = String(fila["MUN-COMERCIAL"] || "")
-              .trim()
-              .toLowerCase();
-            const ciiuFila = String(fila["CIIU-1"] || "")
-              .trim()
-              .toLowerCase();
-            const sectorFila = ciiuFila ? ciiuFila.charAt(0).toUpperCase() : "";
+            const ultAnoFila = obtenerValorFila(fila, "ULT-ANO_REN");
+            const munFila = obtenerValorFila(fila, "MUN-COMERCIAL").toLowerCase();
+            const ciiuRaw = obtenerValorFila(fila, "CIIU-1");
+            const ciiuFila = ciiuRaw.toLowerCase();
+            
+            // Limpieza robusta del sector
+            const ciiuLimpio = ciiuRaw.replace(/[^a-zA-Z0-9* ]/g, "").trim();
+            const sectorFila = ciiuLimpio ? ciiuLimpio.charAt(0).toUpperCase() : "";
 
+            // 1. Filtro Año
             if (
               anosSeleccionados.length > 0 &&
               !anosSeleccionados.includes(ultAnoFila)
             )
               return false;
+
+            // 2. Filtro Municipio (Coincidencia por código o nombre)
+            if (listaMunicipios.length > 0) {
+              const coincideMunicipio = listaMunicipios.some((m) => {
+                const codigo = m.split("-")[0].trim();
+                const nombre = m.includes("-") ? m.split("-")[1].trim() : m;
+                return munFila.includes(codigo) || munFila.includes(nombre);
+              });
+              if (!coincideMunicipio) return false;
+            }
+
+            // 3. Filtro Sector Económico
             if (
-              listaMunicipios.length > 0 &&
-              !listaMunicipios.some((m) => munFila.includes(m))
+              listaSectores.length > 0 &&
+              !listaSectores.includes(sectorFila)
             )
               return false;
-            if (listaSectores.length > 0 && !listaSectores.includes(sectorFila))
-              return false;
+
+            // 4. Filtro Texto CIIU
             if (
               listaCiius.length > 0 &&
               !listaCiius.some((c) => ciiuFila.includes(c))
@@ -184,7 +213,13 @@ function ProcesadorReportesView() {
             return true;
           });
 
-          // Enviar únicamente los datos filtrados en formato JSON
+          if (datosFiltrados.length === 0) {
+            alert("No se encontraron registros con los filtros seleccionados.");
+            setCargando(false);
+            return;
+          }
+
+          // Enviar datos filtrados al backend
           const response = await fetch(`${API_URL}/api/generar-excel-base`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -238,7 +273,7 @@ function ProcesadorReportesView() {
             cursor: "pointer",
           }}
         >
-           Matriculados y Renovados
+          Matriculados y Renovados
         </button>
 
         <button
@@ -257,7 +292,7 @@ function ProcesadorReportesView() {
             cursor: "pointer",
           }}
         >
-           Convertir a Excel Base (Con Filtros Múltiples)
+          Convertir a Excel Base (Con Filtros Múltiples)
         </button>
       </div>
 
@@ -271,12 +306,11 @@ function ProcesadorReportesView() {
           }}
         >
           <h2 style={{ color: "#64ffda", marginTop: 0 }}>
-             Automatizador de Listados (Matriculados y Renovados)
+            Automatizador de Listados (Matriculados y Renovados)
           </h2>
           <p style={{ color: "#8892b0" }}>
             Sube el archivo CSV exportado y obtén el reporte filtrado en Excel
-            con las pestañas
-            <strong> MATRICULADOS</strong> y <strong>RENOVADOS</strong>.
+            con las pestañas <strong>MATRICULADOS</strong> y <strong>RENOVADOS</strong>.
           </p>
 
           <form
@@ -307,9 +341,7 @@ function ProcesadorReportesView() {
                 cursor: "pointer",
               }}
             >
-              {cargando
-                ? "Procesando Excel..."
-                : "Procesar y Descargar Excel"}
+              {cargando ? "Procesando Excel..." : "Procesar y Descargar Excel"}
             </button>
           </form>
         </div>
@@ -328,8 +360,7 @@ function ProcesadorReportesView() {
             📋 Transformador a Excel Base con Desplegables Múltiples
           </h2>
           <p style={{ color: "#8892b0" }}>
-            Selecciona múltiples opciones en cada desplegable para realizar
-            filtrados avanzados.
+            Selecciona múltiples opciones en cada desplegable para realizar filtrados avanzados.
           </p>
 
           <form

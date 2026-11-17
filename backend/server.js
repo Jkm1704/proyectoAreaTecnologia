@@ -15,198 +15,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-// Permite recibir JSONs pesados de hasta 100 Megabytes
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ limit: "100mb", extended: true }));
-
-// --- DATOS INICIALES POR DEFECTO ---
-const datosInicialesTableros = [
-  {
-    titulo: "📌 Proyecto Principal",
-    tarjetas: [
-      {
-        titulo: "Por Hacer",
-        tareas: [
-          {
-            texto: "Diseñar la interfaz",
-            etiqueta: "Diseño",
-            colorEtiqueta: "#ef4444",
-          },
-        ],
-      },
-      {
-        titulo: "En Proceso",
-        tareas: [
-          {
-            texto: "Conectar backend con React",
-            etiqueta: "Dev",
-            colorEtiqueta: "#3b82f6",
-          },
-        ],
-      },
-    ],
-  },
-];
-
-async function sembrarDatosIniciales() {
-  for (const tablero of datosInicialesTableros) {
-    await prisma.tablero.create({
-      data: {
-        titulo: tablero.titulo,
-        tarjetas: {
-          create: (tablero.tarjetas || []).map((tarjeta) => ({
-            titulo: tarjeta.titulo,
-            tareas: {
-              create: (tarjeta.tareas || []).map((tarea) => ({
-                texto: tarea.texto || "",
-                etiqueta: tarea.etiqueta || null,
-                colorEtiqueta: tarea.colorEtiqueta || null,
-              })),
-            },
-          })),
-        },
-      },
-    });
-  }
-}
-
-// ==========================================
-// 📌 MÓDULO TABLEROS (TRELLO)
-// ==========================================
-app.get("/api/tableros", async (req, res) => {
-  try {
-    let tableros = await prisma.tablero.findMany({
-      include: {
-        tarjetas: {
-          include: {
-            tareas: true,
-          },
-        },
-      },
-    });
-
-    if (tableros.length === 0) {
-      await sembrarDatosIniciales();
-      tableros = await prisma.tablero.findMany({
-        include: {
-          tarjetas: {
-            include: {
-              tareas: true,
-            },
-          },
-        },
-      });
-    }
-
-    const respuestaFormateada = tableros.map((t) => ({
-      id: t.id,
-      titulo: t.titulo,
-      tarjetas: t.tarjetas.map((tarjeta) => ({
-        id: tarjeta.id,
-        titulo: tarjeta.titulo,
-        tareas: tarjeta.tareas.map((tarea) => ({
-          id: tarea.id,
-          texto: tarea.texto,
-          etiqueta: tarea.etiqueta,
-          colorEtiqueta: tarea.colorEtiqueta,
-        })),
-      })),
-    }));
-
-    res.json(respuestaFormateada);
-  } catch (error) {
-    console.error("Error al obtener tableros:", error);
-    res.status(500).json({ error: "Error al consultar la base de datos" });
-  }
-});
-
-app.post("/api/tableros", async (req, res) => {
-  const nuevosTableros = req.body;
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.tablero.deleteMany();
-
-      for (const tablero of nuevosTableros) {
-        await tx.tablero.create({
-          data: {
-            titulo: tablero.titulo,
-            tarjetas: {
-              create: (tablero.tarjetas || []).map((tarjeta) => ({
-                titulo: tarjeta.titulo,
-                tareas: {
-                  create: (tarjeta.tareas || []).map((tarea) => ({
-                    texto: tarea.texto || "",
-                    etiqueta: tarea.etiqueta || null,
-                    colorEtiqueta: tarea.colorEtiqueta || null,
-                  })),
-                },
-              })),
-            },
-          },
-        });
-      }
-    });
-
-    res.json({ mensaje: "Guardado correctamente", tableros: nuevosTableros });
-  } catch (error) {
-    console.error("Error al guardar tableros:", error);
-    res
-      .status(500)
-      .json({ error: "Error al guardar tableros en la base de datos" });
-  }
-});
-
-// ==========================================
-// 📌 MÓDULO DE PRÉSTAMOS Y EQUIPOS
-// ==========================================
-app.get("/api/prestamos-data", async (req, res) => {
-  try {
-    const equipos = await prisma.equipo.findMany();
-    const prestamos = await prisma.prestamo.findMany();
-    res.json({ equipos, prestamos });
-  } catch (error) {
-    console.error("Error al obtener préstamos:", error);
-    res.status(500).json({ error: "Error al leer los datos de préstamos" });
-  }
-});
-
-app.post("/api/prestamos-data", async (req, res) => {
-  try {
-    const { equipos = [], prestamos = [] } = req.body;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.equipo.deleteMany();
-      await tx.prestamo.deleteMany();
-
-      if (equipos.length > 0) {
-        await tx.equipo.createMany({
-          data: equipos.map((e) => ({
-            nombre: e.nombre,
-            categoria: e.categoria,
-            estado: e.estado || "Disponible",
-          })),
-        });
-      }
-
-      if (prestamos.length > 0) {
-        await tx.prestamo.createMany({
-          data: prestamos.map((p) => ({
-            equipoId: p.equipoId,
-            solicitante: p.solicitante,
-            fechaPrestamo: p.fechaPrestamo,
-            fechaDevolucion: p.fechaDevolucion,
-          })),
-        });
-      }
-    });
-
-    res.json({ message: "Datos de préstamos guardados correctamente" });
-  } catch (error) {
-    console.error("Error al guardar préstamos:", error);
-    res.status(500).json({ error: "Error al guardar datos de préstamos" });
-  }
-});
 
 // --- ESTRUCTURA DE COLUMNAS PARA REPORTES ---
 const COLUMNAS_DESEADAS = [
@@ -288,7 +98,6 @@ function formatearFecha(val) {
 function parsearCsvLineas(buffer) {
   let contenido = buffer.toString("latin1");
 
-  // Omitir la directiva "sep=" de Excel si está presente al inicio
   if (
     contenido.toLowerCase().startsWith("sep=") ||
     contenido.toLowerCase().startsWith("ï»¿sep=") ||
@@ -325,11 +134,9 @@ function parsearCsvLineas(buffer) {
 
   if (lineas.length === 0) return [];
 
-  // Detectar automáticamente si el separador es ';' o ','
   const primeraLinea = lineas[0];
   const separador = primeraLinea.includes(";") ? ";" : ",";
 
-  // Limpiar encabezados de comillas y caracteres residuales
   const encabezados = primeraLinea
     .split(separador)
     .map((h) =>
@@ -354,6 +161,14 @@ function parsearCsvLineas(buffer) {
   return datos;
 }
 
+// Helper para obtener valor de propiedad sin importar mayúsculas
+function obtenerValor(fila, clave) {
+  const kFound = Object.keys(fila).find(
+    (k) => k.trim().toUpperCase() === clave.toUpperCase(),
+  );
+  return kFound ? String(fila[kFound]).trim() : "";
+}
+
 // ==========================================
 // 📌 1. ENDPOINT: MATRICULADOS Y RENOVADOS
 // ==========================================
@@ -374,12 +189,7 @@ app.post(
         const filaFiltrada = {};
 
         COLUMNAS_DESEADAS.forEach((col) => {
-          // Búsqueda insensible a Mayúsculas/Minúsculas de las columnas
-          const claveExistente = Object.keys(filaObj).find(
-            (k) => k.trim().toUpperCase() === col.toUpperCase(),
-          );
-
-          let val = claveExistente ? filaObj[claveExistente] : "";
+          let val = obtenerValor(filaObj, col);
 
           if (
             col.toUpperCase().includes("FEC") ||
@@ -391,14 +201,12 @@ app.post(
           filaFiltrada[col] = String(val).trim();
         });
 
-        // Ignorar filas vacías
         const tieneValores = Object.values(filaFiltrada).some((v) => v !== "");
         if (!tieneValores) return;
 
         const fecMat = filaFiltrada["FEC-MATRICULA"];
         const fecRen = filaFiltrada["FEC-RENOVACION"];
 
-        // Comparación de fechas de matrícula y renovación
         if (fecMat && fecRen && fecMat === fecRen) {
           matriculados.push(filaFiltrada);
         } else {
@@ -412,10 +220,8 @@ app.post(
         const sheet = workbook.addWorksheet(nombrePestana);
         sheet.views = [{ showGridLines: true }];
 
-        // Agregar fila de Encabezado
         sheet.addRow(COLUMNAS_DESEADAS);
 
-        // Agregar Filas de Datos
         datos.forEach((row) => {
           const valoresFila = COLUMNAS_DESEADAS.map((col) => row[col] || "");
           sheet.addRow(valoresFila);
@@ -424,7 +230,6 @@ app.post(
         const totalFilas = datos.length + 1;
         const totalColumnas = COLUMNAS_DESEADAS.length;
 
-        // Formato visual de celdas
         for (let r = 1; r <= totalFilas; r++) {
           const row = sheet.getRow(r);
           row.height = 20;
@@ -439,17 +244,11 @@ app.post(
               right: { style: "thin", color: { argb: "808080" } },
             };
 
-            if (r === 1) {
-              cell.font = { name: "Aptos Narrow", bold: false, size: 11 };
-              cell.alignment = { vertical: "middle", horizontal: "left" };
-            } else {
-              cell.font = { name: "Aptos Narrow", size: 11 };
-              cell.alignment = { vertical: "middle", horizontal: "left" };
-            }
+            cell.font = { name: "Aptos Narrow", size: 11 };
+            cell.alignment = { vertical: "middle", horizontal: "left" };
           }
         }
 
-        // Ancho automático para columnas
         COLUMNAS_DESEADAS.forEach((colName, index) => {
           const colIndex = index + 1;
           let maxLen = colName.length;
@@ -490,61 +289,81 @@ app.post(
 );
 
 // ==========================================
-// 📌 2. ENDPOINT: GENERAR EXCEL DESDE JSON
+// 📌 2. ENDPOINT: GENERAR EXCEL BASE CON ENCABEZADO "CAMARA DE COMERCIO DE PALMIRA"
 // ==========================================
 app.post("/api/generar-excel-base", async (req, res) => {
   try {
     const { datos = [] } = req.body;
 
     const datosProcesados = datos.map((fila) => {
-      const ciiuFila = String(fila["CIIU-1"] || "").trim();
-      const sectorFila = ciiuFila ? ciiuFila.charAt(0).toUpperCase() : "";
+      const ciiuRaw = obtenerValor(fila, "CIIU-1");
+      let sectorFila = "";
+      let ciiuCodigo = "";
+      let actividadFila = obtenerValor(fila, "ACTIVIDAD");
+
+      if (ciiuRaw) {
+        const partes = ciiuRaw.split("**");
+        const codigoPart = partes[0].trim();
+        if (codigoPart.length > 0) {
+          sectorFila = codigoPart.charAt(0).toUpperCase();
+          ciiuCodigo = codigoPart.substring(1);
+        }
+        if (partes.length > 1 && partes[1].trim()) {
+          actividadFila = partes[1].trim();
+        }
+      }
 
       return {
-        MATRICULA: fila["MATRICULA"] || "",
-        ORGANIZACION: fila["ORGANIZACION"] || "",
-        "EST-MATRICULA": fila["EST-MATRICULA"] || "",
-        "RAZON SOCIAL": fila["RAZON SOCIAL"] || "",
-        "NOMBRE 1": fila["NOMBRE 1"] || "",
-        "NOMBRE 2": fila["NOMBRE 2"] || "",
-        "APELLIDO 1": fila["APELLIDO 1"] || "",
-        "APELLIDO 2": fila["APELLIDO 2"] || "",
-        NIT: fila["NIT"] || "",
-        "FEC-MATRICULA": formatearFecha(fila["FEC-MATRICULA"]),
-        "FEC-RENOVACION": formatearFecha(fila["FEC-RENOVACION"]),
-        "ULT-ANO_REN": fila["ULT-ANO_REN"] || "",
-        "DIR-COMERCIAL": fila["DIR-COMERCIAL"] || "",
-        "BARRIO-COMERCIAL": fila["BARRIO-COMERCIAL"] || "",
-        "MUN-COMERCIAL": fila["MUN-COMERCIAL"] || "",
-        "TEL-COM-1": fila["TEL-COM-1"] || "",
-        "EMAIL-COMERCIAL": fila["EMAIL-COMERCIAL"] || "",
+        MATRICULA: obtenerValor(fila, "MATRICULA"),
+        ORGANIZACION: obtenerValor(fila, "ORGANIZACION"),
+        "EST-MATRICULA": obtenerValor(fila, "EST-MATRICULA"),
+        "RAZON SOCIAL": obtenerValor(fila, "RAZON SOCIAL"),
+        "NOMBRE 1": obtenerValor(fila, "NOMBRE 1"),
+        "NOMBRE 2": obtenerValor(fila, "NOMBRE 2"),
+        "APELLIDO 1": obtenerValor(fila, "APELLIDO 1"),
+        "APELLIDO 2": obtenerValor(fila, "APELLIDO 2"),
+        NIT: obtenerValor(fila, "NIT"),
+        "FEC-MATRICULA": obtenerValor(fila, "FEC-MATRICULA"),
+        "FEC-RENOVACION": obtenerValor(fila, "FEC-RENOVACION"),
+        "ULT-ANO_REN": obtenerValor(fila, "ULT-ANO_REN"),
+        "DIR-COMERCIAL": obtenerValor(fila, "DIR-COMERCIAL"),
+        "BARRIO-COMERCIAL": obtenerValor(fila, "BARRIO-COMERCIAL"),
+        "MUN-COMERCIAL": obtenerValor(fila, "MUN-COMERCIAL"),
+        "TEL-COM-1": obtenerValor(fila, "TEL-COM-1"),
+        "EMAIL-COMERCIAL": obtenerValor(fila, "EMAIL-COMERCIAL"),
         SECTORES: sectorFila,
-        "CIIU-1": ciiuFila,
-        "ACTIVIDAD ECONOMICA": fila["ACTIVIDAD"] || "",
-        "TAM-EMPRESA": fila["TAM-EMPRESA"] || "",
-        PERSONAL: fila["PERSONAL"] || "0",
+        "CIIU-1": ciiuCodigo,
+        "ACTIVIDAD ECONOMICA": actividadFila,
+        "TAM-EMPRESA": obtenerValor(fila, "TAM-EMPRESA"),
+        PERSONAL: obtenerValor(fila, "PERSONAL"),
       };
     });
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("PN-PJ-ACTIVOS-R2026");
+    const sheet = workbook.addWorksheet("19-10-2026-PN-PJ-ACTIVOS-R2026");
     sheet.views = [{ showGridLines: true }];
 
+    // Fila 1: Título exacto de la plantilla
+    sheet.addRow(["CAMARA DE COMERCIO DE PALMIRA"]);
+
+    // Fila 2: Nombres de columnas
     sheet.addRow(COLUMNAS_BASE);
 
+    // Filas 3+: Datos
     datosProcesados.forEach((row) => {
       const valoresFila = COLUMNAS_BASE.map((col) => row[col] || "");
       sheet.addRow(valoresFila);
     });
 
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { name: "Aptos Narrow", bold: false, size: 11 };
-    headerRow.alignment = { vertical: "middle", horizontal: "left" };
-
-    const totalFilas = datosProcesados.length + 1;
+    const totalFilas = datosProcesados.length + 2;
     const totalColumnas = COLUMNAS_BASE.length;
 
-    for (let r = 1; r <= totalFilas; r++) {
+    // Formatear Fila 1 (Título)
+    const titleCell = sheet.getCell("A1");
+    titleCell.font = { name: "Aptos Narrow", bold: true, size: 12 };
+
+    // Formatear Filas 2 a N
+    for (let r = 2; r <= totalFilas; r++) {
       const row = sheet.getRow(r);
       row.height = 20;
 
@@ -558,18 +377,21 @@ app.post("/api/generar-excel-base", async (req, res) => {
           right: { style: "thin", color: { argb: "808080" } },
         };
 
-        if (r > 1) {
+        if (r === 2) {
+          cell.font = { name: "Aptos Narrow", bold: true, size: 11 };
+        } else {
           cell.font = { name: "Aptos Narrow", size: 11 };
-          cell.alignment = { vertical: "middle" };
         }
+        cell.alignment = { vertical: "middle", horizontal: "left" };
       }
     }
 
+    // Auto-ajustar anchos
     COLUMNAS_BASE.forEach((colName, index) => {
       const colIndex = index + 1;
       let maxLen = colName.length;
 
-      for (let r = 1; r <= Math.min(totalFilas, 100); r++) {
+      for (let r = 2; r <= Math.min(totalFilas, 100); r++) {
         const cellVal = sheet.getRow(r).getCell(colIndex).value;
         if (cellVal) {
           const len = String(cellVal).length;
@@ -586,7 +408,7 @@ app.post("/api/generar-excel-base", async (req, res) => {
     );
     res.setHeader(
       "Content-Disposition",
-      'attachment; filename="BASE_FILTRADA_ACTIVOS.xlsx"',
+      'attachment; filename="19-10-2026-BASE-PN-PJ-ACTIVOS-R2026.xlsx"',
     );
 
     await workbook.xlsx.write(res);
